@@ -8,7 +8,7 @@ ROOT = r"G:\Kimi Work\PictureViewer"
 ZIP_PATH = os.path.join(ROOT, "PictureViewer-v1.0.zip")
 
 # 包含的顶层条目
-INCLUDE_DIRS = ["src", "docs", "test-images", "dist", "scripts"]
+INCLUDE_DIRS = ["src", "docs", "test-images", "dist", "scripts", "public"]
 INCLUDE_FILES = [
     "index.html", "package.json", "package-lock.json", "README.md",
     "tsconfig.json", "tsconfig.app.json", "tsconfig.node.json",
