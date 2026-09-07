@@ -32,3 +32,6 @@ launcher-test.log
 github 上传封面/
 截图/
 操作演示/
+
+# Tauri Rust 编译产物
+src-tauri/target/

@@ -1,0 +1,19 @@
+[package]
+name = "picture-viewer"
+version = "0.1.0"
+description = "图片批注查看器 - 轻量图片查看 + 可编辑批注工具"
+authors = ["shrimp"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
