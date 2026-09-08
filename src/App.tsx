@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Viewer } from '@/components/Viewer';
 import type { ViewerHandle, AnnotationSettings } from '@/components/Viewer';
 import { TopToolbar } from '@/components/TopToolbar';
@@ -9,6 +9,7 @@ import type { ImageInfo, ToolId, ExportFormat } from '@/types';
 import { baseName } from '@/lib/imageLoader';
 import { saveBlobAs, copyImageToClipboard } from '@/lib/exportImage';
 import { captureScreenshotFile, isScreenshotSupported, SCREENSHOT_UNSUPPORTED_MSG } from '@/lib/screenshot';
+import { readImagePathAsFile } from '@/lib/nativeOpen';
 
 export default function App() {
   const viewerRef = useRef<ViewerHandle>(null);
@@ -103,6 +104,36 @@ export default function App() {
     },
     [showMessage],
   );
+
+  // Tauri 桌面端：文件关联/命令行传图。
+  // 1) 先注册 listen("open-file") 接收运行中实例转发的路径；
+  // 2) 再 invoke("get_pending_file") 拉取冷启动参数（listen 就绪后才拉，避免竞态丢文件）。
+  useEffect(() => {
+    if (!window.__TAURI__) return;
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    const openPath = async (path: string) => {
+      try {
+        const file = await readImagePathAsFile(path);
+        await viewerRef.current?.openFile(file);
+      } catch (err) {
+        showMessage(err instanceof Error ? `打开失败：${err.message}` : '打开失败，请重试');
+      }
+    };
+    void (async () => {
+      const { listen } = await import('@tauri-apps/api/event');
+      const { invoke } = await import('@tauri-apps/api/core');
+      const u = await listen<string>('open-file', (e) => void openPath(e.payload));
+      if (disposed) { u(); return; }
+      unlisten = u;
+      const pending = await invoke<string | null>('get_pending_file');
+      if (pending) void openPath(pending);
+    })();
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [showMessage]);
 
   const hasImage = !!imageInfo;
   const defaultExportName = imageInfo ? `${baseName(imageInfo.fileName)}_批注` : '批注';

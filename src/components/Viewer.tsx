@@ -425,8 +425,25 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(prop
     [],
   );
 
+  /** 打开图片入口：Tauri 桌面端走原生对话框，网页版走隐藏的 input[type=file]（行为不变） */
+  const openFileDialog = useCallback(() => {
+    if (window.__TAURI__) {
+      void (async () => {
+        try {
+          const { openImagesViaNativeDialog } = await import('@/lib/nativeOpen');
+          const files = await openImagesViaNativeDialog();
+          if (files.length > 0) await loadImage(files[0]); // 单图工作区：取第一个
+        } catch (err) {
+          onError(err instanceof Error ? `打开失败：${err.message}` : '打开失败，请重试');
+        }
+      })();
+      return;
+    }
+    fileInputRef.current?.click();
+  }, [loadImage, onError]);
+
   useImperativeHandle(ref, () => ({
-    openFileDialog: () => fileInputRef.current?.click(),
+    openFileDialog,
     openFile: loadImage,
     undo,
     redo,
@@ -444,7 +461,7 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(prop
     exportImage,
     hasImage: () => !!loadedRef.current,
     annotationCount: () => fabricRef.current?.getObjects().length ?? 0,
-  }), [loadImage, undo, redo, clearAnnotations, zoomFit, zoomTo, exportImage]);
+  }), [openFileDialog, loadImage, undo, redo, clearAnnotations, zoomFit, zoomTo, exportImage]);
 
   // ---------------- 画布初始化（仅一次） ----------------
   useEffect(() => {
@@ -1155,7 +1172,7 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(prop
       }`}
     >
       <canvas ref={canvasElRef} />
-      {!hasImage && <EmptyState onOpenFile={() => fileInputRef.current?.click()} />}
+      {!hasImage && <EmptyState onOpenFile={openFileDialog} />}
       {cropDraft && (
         <div className="absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900/95 px-3 py-2 shadow-lg shadow-black/40">
           <span className="select-none text-xs text-zinc-400">裁剪选区就绪</span>
