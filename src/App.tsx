@@ -95,6 +95,7 @@ export default function App() {
         const result = await saveBlobAs(blob, fileName, format);
         if (result === 'saved') showMessage('已保存');
         else if (result === 'downloaded') showMessage('已开始下载');
+        else showMessage('已取消导出'); // cancelled：用户关掉了保存对话框
         setExportOpen(false);
       } catch (err) {
         showMessage(err instanceof Error ? err.message : '导出失败');

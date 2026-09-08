@@ -28,4 +28,6 @@ interface FileSystemFileHandleLike {
 
 interface Window {
   showSaveFilePicker?: (options?: SaveFilePickerOptions) => Promise<FileSystemFileHandleLike>;
+  /** Tauri v2 桌面端注入的全局对象（tauri.conf.json 开启 withGlobalTauri 后存在） */
+  __TAURI__?: unknown;
 }

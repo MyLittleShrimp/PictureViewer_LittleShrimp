@@ -1,1 +1,1 @@
-{}
+{"default":{"identifier":"default","description":"图片批注查看器默认权限：原生另存对话框 + 写入用户在对话框中选择的导出路径","local":true,"windows":["main"],"permissions":["core:default","dialog:allow-save","fs:allow-write-file",{"identifier":"fs:scope","allow":["**"]}]}}

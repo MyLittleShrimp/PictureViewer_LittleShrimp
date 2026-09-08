@@ -28,8 +28,9 @@ export async function canvasToBlob(
 export type SaveResult = 'saved' | 'downloaded' | 'cancelled';
 
 /**
- * 另存为：优先 File System Access API（showSaveFilePicker），
- * 不支持或出错时降级为 <a download>。
+ * 另存为：
+ * - Tauri 桌面端（window.__TAURI__ 存在）：原生 save 对话框 + fs.writeFile 直写所选路径；
+ * - 浏览器：优先 File System Access API（showSaveFilePicker），不支持或出错时降级为 <a download>。
  */
 export async function saveBlobAs(
   blob: Blob,
@@ -38,6 +39,22 @@ export async function saveBlobAs(
 ): Promise<SaveResult> {
   const mime = format === 'png' ? 'image/png' : 'image/jpeg';
   const ext = format === 'png' ? '.png' : '.jpg';
+
+  // Tauri 桌面端：WebView2 不支持 showSaveFilePicker，走原生另存对话框
+  if (window.__TAURI__) {
+    const { save } = await import('@tauri-apps/plugin-dialog');
+    const { writeFile } = await import('@tauri-apps/plugin-fs');
+    const path = await save({
+      defaultPath: suggestedName,
+      filters: [
+        { name: 'PNG 图片', extensions: ['png'] },
+        { name: 'JPEG 图片', extensions: ['jpg', 'jpeg'] },
+      ],
+    });
+    if (!path) return 'cancelled'; // 用户取消
+    await writeFile(path, new Uint8Array(await blob.arrayBuffer()));
+    return 'saved';
+  }
 
   if (typeof window.showSaveFilePicker === 'function') {
     try {
