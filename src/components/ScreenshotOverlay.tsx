@@ -8,12 +8,17 @@ interface DragRect {
 }
 
 /**
- * 原生拖框截图的选区层（Tauri 覆盖层窗口，?mode=screenshot 时挂载）。
- * 流程：invoke(take_screenshot) 拉全屏图 → 拖框（亮框 + box-shadow 压暗四周 + 尺寸标签）
- * → 松手按 devicePixelRatio 换算裁剪 → invoke(finish_screenshot) 交给 Rust 落盘并通知主窗口。
- * Esc → invoke(cancel_screenshot)。
+ * 原生拖框截图的选区层（Tauri 覆盖层窗口，?mode=screenshot&screen=N 时挂载）。
+ * 流程：invoke(take_screenshot, {index}) 拉本屏全屏图 → 拖框（亮框 + box-shadow 压暗四周 + 尺寸标签）
+ * → 首次按下时 invoke(claim_screenshot) 关闭其他屏覆盖层 → 松手按本窗口 devicePixelRatio
+ * 换算裁剪 → invoke(finish_screenshot) 交给 Rust 落盘并通知主窗口。Esc → invoke(cancel_screenshot)。
  */
 export function ScreenshotOverlay() {
+  // 本覆盖层对应的显示器 index（多屏时每屏一个窗口，缺省 0 = 单屏行为）
+  const [screenIndex] = useState(() => {
+    const n = Number(new URLSearchParams(window.location.search).get('screen') ?? '0');
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  });
   const [imgUrl, setImgUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rect, setRect] = useState<DragRect | null>(null);
@@ -21,13 +26,13 @@ export function ScreenshotOverlay() {
   const finishingRef = useRef(false);
   const imgRef = useRef<HTMLImageElement | null>(null);
 
-  // 拉取 Rust 已抓取的全屏 PNG（截图在覆盖层出现前完成，画面不含本窗口）
+  // 拉取 Rust 已抓取的本屏 PNG（截图在覆盖层出现前完成，画面不含本窗口）
   useEffect(() => {
     let created: string | null = null;
     void (async () => {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
-        const bytes = await invoke<number[]>('take_screenshot');
+        const bytes = await invoke<number[]>('take_screenshot', { index: screenIndex });
         const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: 'image/png' }));
         created = url;
         setImgUrl(url);
@@ -38,7 +43,7 @@ export function ScreenshotOverlay() {
     return () => {
       if (created) URL.revokeObjectURL(created);
     };
-  }, []);
+  }, [screenIndex]);
 
   // Esc 取消
   useEffect(() => {
@@ -98,6 +103,10 @@ export function ScreenshotOverlay() {
         if (e.button !== 0 || finishingRef.current) return;
         draggingRef.current = true;
         setRect({ x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY });
+        // 开始拖框即认领本屏：让 Rust 关掉其他显示器的覆盖层（fire-and-forget）
+        void import('@tauri-apps/api/core').then(({ invoke }) =>
+          invoke('claim_screenshot', { index: screenIndex }).catch(() => {}),
+        );
       }}
       onMouseMove={(e) => {
         if (!draggingRef.current) return;
