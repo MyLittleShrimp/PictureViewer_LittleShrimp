@@ -1,6 +1,7 @@
 import {
   FolderOpen,
   MonitorDown,
+  Scissors,
   Save,
   Copy,
   ZoomIn,
@@ -18,6 +19,7 @@ interface TopToolbarProps {
   canRedo: boolean;
   onOpen: () => void;
   onScreenshot: () => void;
+  onFreeScreenshot: () => void;
   onExport: () => void;
   onCopy: () => void;
   onZoomIn: () => void;
@@ -71,6 +73,12 @@ export function TopToolbar(p: TopToolbarProps) {
       <ToolButton title="截图并载入 (Ctrl+Shift+S)" onClick={p.onScreenshot}>
         <MonitorDown className="h-4 w-4" />
       </ToolButton>
+      {/* 自由拖框截图：仅 Tauri 桌面端可用（原生实现），网页版隐藏 */}
+      {!!window.__TAURI__ && (
+        <ToolButton title="自由截图 (Ctrl+Shift+P)" onClick={p.onFreeScreenshot}>
+          <Scissors className="h-4 w-4" />
+        </ToolButton>
+      )}
       <ToolButton title="导出另存为…" onClick={p.onExport} disabled={!p.hasImage}>
         <Save className="h-4 w-4" />
       </ToolButton>

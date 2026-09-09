@@ -182,10 +182,10 @@ fn main() {
                 let _ = w.set_focus();
             }
         }))
-        // 全局热键 Ctrl+Shift+A：与「截图」按钮同一流程
+        // 全局热键 Ctrl+Shift+P：与「自由截图」按钮同一流程
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_shortcut("Ctrl+Shift+A")
+                .with_shortcut("Ctrl+Shift+P")
                 .expect("无效的截图热键")
                 .with_handler(|app, _shortcut, event| {
                     if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
