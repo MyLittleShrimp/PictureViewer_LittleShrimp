@@ -19,9 +19,9 @@
 
 ## 下载
 
-**Windows 桌面版（推荐）**：👉 [下载 v0.1.0 安装包（2.2 MB）](https://github.com/MyLittleShrimp/PictureViewer_LittleShrimp/releases/download/v0.1.0/PictureViewer_0.1.0_x64-setup.exe)
+**Windows 桌面版（推荐）**：👉 [下载 v0.2.0 安装包（2.3 MB）](https://github.com/MyLittleShrimp/PictureViewer_LittleShrimp/releases/download/v0.2.0/PictureViewer_0.2.0_x64-setup.exe)
 
-双击安装即可，支持双击图片直接打开（文件关联）、单实例窗口、原生打开/保存对话框。首次运行若提示"未知发布者"，选择"仍要运行"即可（安装包未做代码签名）。
+双击安装即可，支持双击图片直接打开（文件关联）、单实例窗口、原生打开/保存对话框、多屏自由拖框截图（`Ctrl+Shift+P`）。首次运行若提示"未知发布者"，选择"仍要运行"即可（安装包未做代码签名）。
 
 更多版本见 [Releases 页面](https://github.com/MyLittleShrimp/PictureViewer_LittleShrimp/releases)。
 
