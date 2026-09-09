@@ -17,9 +17,17 @@
 - **原图分辨率导出**：PNG 无损 / JPEG（质量可调）；**一键复制 PNG 到剪贴板**（Ctrl+Shift+C）；Chrome/Edge 支持系统「另存为」对话框；无批注时可用作格式转换（TGA/TIFF → PNG）
 - **全中文深色专业界面**，完整快捷键（V/P/L/A/R/O/T/M/E/C/H 等）
 
+## 下载
+
+**Windows 桌面版（推荐）**：👉 [下载 v0.1.0 安装包（2.2 MB）](https://github.com/MyLittleShrimp/PictureViewer_LittleShrimp/releases/download/v0.1.0/PictureViewer_0.1.0_x64-setup.exe)
+
+双击安装即可，支持双击图片直接打开（文件关联）、单实例窗口、原生打开/保存对话框。首次运行若提示"未知发布者"，选择"仍要运行"即可（安装包未做代码签名）。
+
+更多版本见 [Releases 页面](https://github.com/MyLittleShrimp/PictureViewer_LittleShrimp/releases)。
+
 ## 快速开始
 
-**最简单的方式（Windows）**：双击项目根目录的 `启动图片批注查看器.bat` 即可——它会自动检查 Node.js、首次运行自动安装依赖、自动挑选空闲端口（3000-3009）并打开浏览器。使用期间保持窗口打开，**关闭窗口即停止服务**。
+**网页版最简单的方式（Windows）**：双击项目根目录的 `启动图片批注查看器.bat` 即可——它会自动检查 Node.js、首次运行自动安装依赖、自动挑选空闲端口（3000-3009）并打开浏览器。使用期间保持窗口打开，**关闭窗口即停止服务**。
 
 **命令行方式**：
 
@@ -45,4 +53,4 @@ npm run preview    # 预览构建产物
 
 ## 技术栈
 
-React 19 + TypeScript + Vite 7 + Tailwind CSS + shadcn/ui + fabric.js（批注层）+ utif（TIFF），TGA 为内置纯 TS 解码器。纯前端应用，所有处理在浏览器本地完成，不上传任何图片。
+React 19 + TypeScript + Vite 7 + Tailwind CSS + shadcn/ui + fabric.js（批注层）+ utif（TIFF），TGA 为内置纯 TS 解码器。网页版为纯前端应用，所有处理在浏览器本地完成，不上传任何图片。桌面版基于 Tauri 2（Rust + WebView2）打包，源码见 `src-tauri/`。
