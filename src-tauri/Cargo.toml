@@ -1,6 +1,6 @@
 [package]
 name = "picture-viewer"
-version = "0.1.0"
+version = "0.2.0"
 description = "图片批注查看器 - 轻量图片查看 + 可编辑批注工具"
 authors = ["shrimp"]
 edition = "2021"
