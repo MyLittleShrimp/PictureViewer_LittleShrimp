@@ -66,8 +66,18 @@ export default function App() {
     }
   }, [showMessage]);
 
-  // 截图：getDisplayMedia 弹浏览器选择器 → 抓帧 → 走现有图片加载流程载入工作区
+  // 截图：Tauri 桌面端走原生拖框截图；网页版走 getDisplayMedia 弹浏览器选择器
   const handleScreenshot = useCallback(async () => {
+    // 桌面端：隐藏主窗 → 全屏覆盖层拖框选区 → 完成后经 open-file 事件自动载入
+    if (window.__TAURI__) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('start_screenshot');
+      } catch (err) {
+        showMessage(err instanceof Error ? `截图失败：${err.message}` : '截图失败，请重试');
+      }
+      return;
+    }
     if (!isScreenshotSupported()) {
       showMessage(SCREENSHOT_UNSUPPORTED_MSG);
       return;
