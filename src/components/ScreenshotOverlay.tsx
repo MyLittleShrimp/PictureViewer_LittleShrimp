@@ -24,7 +24,21 @@ export function ScreenshotOverlay() {
   const [rect, setRect] = useState<DragRect | null>(null);
   const draggingRef = useRef(false);
   const finishingRef = useRef(false);
+  const readySentRef = useRef(false);
   const imgRef = useRef<HTMLImageElement | null>(null);
+
+  /** 图片加载完成 + 双帧渲染保险后，通知 Rust 显示本覆盖层（避免白/黑屏过渡） */
+  const notifyReady = () => {
+    if (readySentRef.current) return;
+    readySentRef.current = true;
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        void import('@tauri-apps/api/core').then(({ invoke }) =>
+          invoke('overlay_ready', { index: screenIndex }).catch(() => {}),
+        );
+      }),
+    );
+  };
 
   // 拉取 Rust 已抓取的本屏 PNG（截图在覆盖层出现前完成，画面不含本窗口）
   useEffect(() => {
@@ -38,6 +52,7 @@ export function ScreenshotOverlay() {
         setImgUrl(url);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
+        notifyReady(); // 出错也要显示覆盖层（展示错误信息、可用 Esc 退出），不等看门狗
       }
     })();
     return () => {
@@ -125,6 +140,7 @@ export function ScreenshotOverlay() {
           src={imgUrl}
           alt=""
           draggable={false}
+          onLoad={notifyReady}
           className="absolute inset-0 h-full w-full object-fill"
         />
       )}

@@ -13,6 +13,9 @@ const IMAGE_EXTS: [&str; 10] = [
 /// 覆盖层窗口 label 前缀（多屏时每屏一个：screenshot-overlay-0/1/...）
 const OVERLAY_PREFIX: &str = "screenshot-overlay";
 
+/// 覆盖层就绪看门狗：超过该时间仍有覆盖层未 ready 则放弃本次截图并恢复主窗
+const OVERLAY_READY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+
 /// 从 argv 中提取图片路径：跳过 exe 自身（第 0 项）与 '-' 开头的开关参数，
 /// 只接受真实存在且扩展名受支持的文件。
 fn extract_image_path(args: Vec<String>) -> Option<String> {
@@ -38,11 +41,18 @@ fn get_pending_file(state: tauri::State<PendingFile>) -> Option<String> {
 /// 截图流程进行中标志（热键/按钮重复触发、覆盖层重复创建的统一防护）
 static CAPTURING: AtomicBool = AtomicBool::new(false);
 
-/// 各显示器已抓取的全屏 PNG 字节（按屏 index），等覆盖层窗口就绪后来拉取
-struct ScreenshotStore(Mutex<Vec<Vec<u8>>>);
+/// 各显示器已抓取的全屏 PNG（按屏 index）与主屏 index
+struct ScreenshotState {
+    pngs: Vec<Vec<u8>>,
+    primary: usize,
+}
+struct ScreenshotStore(Mutex<ScreenshotState>);
+
+/// 已「就绪并显示」的覆盖层 label（前端首帧渲染后 overlay_ready 登记）
+struct ReadyOverlays(Mutex<Vec<String>>);
 
 /// 被「有意关闭」的覆盖层 label 清单：
-/// claim/finish/cancel 主动关窗前先登记，Destroyed 处理据此区分用户异常关闭（Alt+F4 等）
+/// claim/finish/cancel/看门狗主动关窗前先登记，Destroyed 处理据此区分用户异常关闭（Alt+F4 等）
 struct ClosingIntent(Mutex<Vec<String>>);
 
 /// 恢复主窗口并重置进行标志（幂等：成功/取消/覆盖层被异常关闭都会走到）
@@ -74,7 +84,7 @@ fn close_all_overlays(app: &tauri::AppHandle, except: Option<&str>) {
     }
 }
 
-/// 截图启动流程（按钮与全局热键共用）：藏主窗 → 抓全部屏 → 每屏建全屏选区覆盖层
+/// 截图启动流程（按钮与全局热键共用）：藏主窗 → 抓全部屏 → 每屏建隐藏覆盖层
 async fn start_screenshot_impl(app: tauri::AppHandle) -> Result<(), String> {
     if CAPTURING.swap(true, Ordering::SeqCst) {
         return Ok(()); // 已在截图中，忽略重复触发
@@ -90,7 +100,7 @@ async fn start_screenshot_impl(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 async fn do_start(app: &tauri::AppHandle) -> Result<(), String> {
-    // 先隐藏主窗口（避免截到自己），给 DWM 一点时间真正移出画面
+    // 先隐藏主窗口（避免截到自己），给 DWM 一点时间真正移出画面（200ms 保险值，不压缩）
     if let Some(main) = app.get_webview_window("main") {
         let _ = main.hide();
     }
@@ -115,13 +125,20 @@ async fn do_start(app: &tauri::AppHandle) -> Result<(), String> {
         let d = screen.display_info;
         infos.push((d.x, d.y, d.scale_factor as f64, d.is_primary));
     }
+    let primary_idx = infos.iter().position(|i| i.3).unwrap_or(0);
     *app
         .state::<ScreenshotStore>()
         .0
         .lock()
-        .map_err(|_| "内部状态错误".to_string())? = pngs;
+        .map_err(|_| "内部状态错误".to_string())? = ScreenshotState { pngs, primary: primary_idx };
+    app.state::<ReadyOverlays>()
+        .0
+        .lock()
+        .map_err(|_| "内部状态错误".to_string())?
+        .clear();
 
-    let primary_idx = infos.iter().position(|i| i.3).unwrap_or(0);
+    // 每屏建覆盖层：先隐藏（visible(false)），等前端冻结画面首帧渲染好再 show，
+    // 避免 WebView2 初始化期间的白/黑屏过渡（闪屏主因）
     let mut build_err: Option<String> = None;
     for (i, (x, y, sf, _)) in infos.iter().enumerate() {
         let label = format!("{OVERLAY_PREFIX}-{i}");
@@ -138,12 +155,13 @@ async fn do_start(app: &tauri::AppHandle) -> Result<(), String> {
         .decorations(false)
         .skip_taskbar(true)
         .resizable(false)
-        .focused(i == primary_idx)
+        .focused(false) // 隐藏窗口无法聚焦，就绪显示时由 overlay_ready 对主屏补聚焦
+        .visible(false)
         .build();
         match overlay_result {
             Ok(overlay) => {
                 // 任一覆盖层被异常关闭（Alt+F4 等）→ 关掉其余覆盖层并恢复主窗口；
-                // 主动关闭（claim/finish/cancel）已在 ClosingIntent 登记，直接忽略
+                // 主动关闭（claim/finish/cancel/看门狗）已在 ClosingIntent 登记，直接忽略
                 let app_for_event = app.clone();
                 let label_for_event = label.clone();
                 overlay.on_window_event(move |event| {
@@ -178,6 +196,32 @@ async fn do_start(app: &tauri::AppHandle) -> Result<(), String> {
         close_all_overlays(app, None);
         return Err(e);
     }
+
+    // 看门狗：超时仍有覆盖层未 ready（WebView 卡死等极端情况）→ 放弃本次截图并恢复主窗，
+    // 防止"主窗已隐藏 + 覆盖层永不显示"的盲操作死局
+    let app_watchdog = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(OVERLAY_READY_TIMEOUT);
+        let labels: Vec<String> = app_watchdog
+            .webview_windows()
+            .keys()
+            .filter(|l| l.starts_with(OVERLAY_PREFIX))
+            .cloned()
+            .collect();
+        if labels.is_empty() {
+            return; // 已 finish/cancel，流程结束
+        }
+        let all_ready = app_watchdog
+            .state::<ReadyOverlays>()
+            .0
+            .lock()
+            .map(|ready| labels.iter().all(|l| ready.contains(l)))
+            .unwrap_or(false);
+        if !all_ready {
+            close_all_overlays(&app_watchdog, None);
+            restore_main(&app_watchdog);
+        }
+    });
     Ok(())
 }
 
@@ -193,9 +237,33 @@ fn take_screenshot(state: tauri::State<ScreenshotStore>, index: usize) -> Result
         .0
         .lock()
         .map_err(|_| "内部状态错误".to_string())?
+        .pngs
         .get(index)
         .cloned()
         .ok_or_else(|| format!("截图尚未就绪（屏 {index}）"))
+}
+
+/// 覆盖层首帧渲染完成：显示对应覆盖层（主屏那一层顺带聚焦，保证 Esc 可达）
+#[tauri::command]
+fn overlay_ready(app: tauri::AppHandle, index: usize) {
+    let label = format!("{OVERLAY_PREFIX}-{index}");
+    if let Ok(mut g) = app.state::<ReadyOverlays>().0.lock() {
+        if !g.contains(&label) {
+            g.push(label.clone());
+        }
+    }
+    if let Some(w) = app.get_webview_window(&label) {
+        let _ = w.show();
+        let is_primary = app
+            .state::<ScreenshotStore>()
+            .0
+            .lock()
+            .map(|s| s.primary == index)
+            .unwrap_or(false);
+        if is_primary {
+            let _ = w.set_focus();
+        }
+    }
 }
 
 /// 用户在某块屏上开始拖框：关掉其他屏的覆盖层，只留当前这层
@@ -268,7 +336,8 @@ fn main() {
         .setup(|app| {
             let pending = extract_image_path(std::env::args().collect());
             app.manage(PendingFile(Mutex::new(pending)));
-            app.manage(ScreenshotStore(Mutex::new(Vec::new())));
+            app.manage(ScreenshotStore(Mutex::new(ScreenshotState { pngs: Vec::new(), primary: 0 })));
+            app.manage(ReadyOverlays(Mutex::new(Vec::new())));
             app.manage(ClosingIntent(Mutex::new(Vec::new())));
             Ok(())
         })
@@ -276,6 +345,7 @@ fn main() {
             get_pending_file,
             start_screenshot,
             take_screenshot,
+            overlay_ready,
             claim_screenshot,
             finish_screenshot,
             cancel_screenshot,
